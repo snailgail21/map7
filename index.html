@@ -293,7 +293,7 @@ function createLegend(min, max) {
         L.DomEvent.disableClickPropagation(legendContainer);
 
         // the legend title; change it to describe your data
-        legendContainer.innerHTML = "<h2 id='legendTitle'>Total Population</h2>";
+        legendContainer.innerHTML = "<h2 id='legendTitle'>Total Population of 15 Cities in the United States from 1950-2020</h2>";
 
         var symbolsContainer = L.DomUtil.create("div", "symbolsContainer", legendContainer);
         var classes = [roundNumber(min), roundNumber((max-min)/2), roundNumber(max)]; // three example values
