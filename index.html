@@ -74,7 +74,7 @@
 
           var map = L.map('map', {
               center: [38.5,-99],
-              zoom: 2
+              zoom: 3
           });
 
          L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
@@ -145,8 +145,8 @@ function createPropSymbols(timestamps, data) {
       // To alter this, the pointToLayer function needs to be used
       pointToLayer: function(feature, latlng) {
           return L.circleMarker(latlng, { // we use circle marker for the points
-              fillColor: "#501e65",  // fill color of the circles
-              color: '#501e65',      // border color of the circles
+              fillColor: "#59E31E",  // fill color of the circles
+              color: '#3BAB09',      // border color of the circles
               weight: 2,             // circle line weight in pixels
               fillOpacity: 0.5       // fill opacity (0-1)
           }).on({
