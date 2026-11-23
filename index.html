@@ -1,0 +1,323 @@
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Lab 7</title>
+
+         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+           crossorigin=""/>
+
+         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+           crossorigin=""></script>
+
+<script src="citypop.js"></script>
+
+<style type="text/css">
+  html, body { margin: 0; padding: 0; height: 100%; }
+  #map { min-height: 100%; }
+  
+.time-control {
+    display: flex;         /* place the items in the box in one row */
+    align-items: center;
+    gap: 8px;              /* space between the items */
+    padding: 6px 15px;
+    font: 14px/16px Arial, Helvetica, sans-serif;
+    background: rgba(255,255,255,0.8);
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    border-radius: 5px;
+}
+.temporal-legend {
+    font-weight: bold;
+}
+
+.play-button {
+    font: inherit;
+    padding: 4px 12px;
+    cursor: pointer;
+}
+
+.legend {
+    padding: 6px 15px;
+    font: 14px/16px Arial, Helvetica, sans-serif;
+    background: rgba(255,255,255,0.8);
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    border-radius: 5px;
+}
+#legendTitle {
+    text-align: center;
+    margin-bottom: 15px;
+    font-variant: small-caps;
+}
+.symbolsContainer {
+    float: left;
+    margin-left: 50px;
+}
+.legendCircle {
+    border-radius: 50%;
+    border: 2px solid #501e65;
+    background: rgba(80, 30, 101, .5);
+    display: inline-block;
+}
+.legendValue {
+    position: absolute;
+    right: 8px;
+}
+</style>
+    </head>
+
+    <body>
+        <div id="map"></div>
+
+        <script type="text/javascript">
+
+          var map = L.map('map', {
+              center: [38.5,-99],
+              zoom: 2
+          });
+
+         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+           attribution: 'Tiles © Esri — Esri, DeLorme, NAVTEQ',
+           maxZoom: 11,
+           minZoom: 3
+         }).addTo(map);
+
+// Run the functions defined below, in this order
+var info = processData(data);   // data is the variable defined in citypop.js
+createPropSymbols(info.timestamps, data);
+createSliderUI(info.timestamps);
+createPlayButton(info.timestamps);
+createLegend(info.min, info.max);
+
+function processData(data) {
+  // First, initialize the variables to hold the timestamps and min/max population values
+  var timestamps = [];  // square brackets to define an array of data
+                        // because there are multiple timestamps
+  var min = Infinity;   // for the min, begin with the largest possible value - infinity
+  var max = -Infinity;  // for the max, begin with the smallest possible value - negative infinity
+
+  // Go through each row/feature of the data table
+  // Note data is the variable name in the function definition - processData(data)
+  for (var feature in data.features) {
+      var properties = data.features[feature].properties;
+
+      // At each row, go through the columns/attributes to get the values
+      for (var attribute in properties) {
+          if ( attribute != 'id' &&
+               attribute != 'name' &&
+               attribute != 'latitude' &&
+               attribute != 'longitude' )   // != means NOT EQUAL TO
+                                            // These columns are NOT timestamps, so they are skipped
+                                            // Modify this part when mapping your own data
+          {
+              if ( timestamps.indexOf(attribute) === -1 ) { // indexOf() searches an array for a value and returns its position (or -1 if not found)
+                                                            // here, the new timestamp is only added when it is not already in the array
+                                                            // triple equals === compares both type and value
+
+                  timestamps.push(attribute);  // The JS push() method adds new items to the end of an array
+              }
+              var value = Number(properties[attribute]); // Number() makes sure the value is a number, not text
+              if (value < min) {
+                  min = value; // record/update the current smaller values as the min
+              }
+              if (value > max) {
+                  max = value; // record/update the current larger values as the max
+              }
+          }
+      }
+  }
+  return { // the function finally returns the timestamps array, the min and max of population data
+      timestamps : timestamps,
+      min : min,
+      max : max
+  }
+}
+
+var cities;   // the city circles; more than one function uses them, so we define the variable here
+
+// The function to draw the proportional symbols
+function createPropSymbols(timestamps, data) {
+
+  cities = L.geoJson(data, {
+
+      // By default, Leaflet draws geojson points as simple markers
+      // To alter this, the pointToLayer function needs to be used
+      pointToLayer: function(feature, latlng) {
+          return L.circleMarker(latlng, { // we use circle marker for the points
+              fillColor: "#501e65",  // fill color of the circles
+              color: '#501e65',      // border color of the circles
+              weight: 2,             // circle line weight in pixels
+              fillOpacity: 0.5       // fill opacity (0-1)
+          }).on({
+                mouseover: function(e) {
+                    this.openPopup();
+                    this.setStyle({fillColor: 'green'});  // fill color turns green when mouseover
+                },
+                mouseout: function(e) {
+                    this.closePopup();
+                    this.setStyle({fillColor: '#501e65'});  // fill turns original color when mouseout
+                }
+        });
+      }
+  }).addTo(map);
+
+  updatePropSymbols(timestamps[0]); // this function is defined below
+                                    // When loaded, the map will first show proportional symbols with the first timestamp's data
+}
+
+// The function to update/resize each circle marker according to a value in the time series
+function updatePropSymbols(timestamp) {
+
+  cities.eachLayer(function(layer) {  // eachLayer() is a Leaflet function to go through the layers/points of the map one by one
+
+      var props = layer.feature.properties;   // attributes
+      var radius = calcPropRadius(Number(props[timestamp])); // circle radius, calculation function defined below
+
+      // pop-up information (when mouseover) for each city is also defined here
+      // toLocaleString() adds commas to the number, for example 3620962 becomes 3,620,962
+      var popupContent = props.name + ' ' + timestamp + ' population: ' + Number(props[timestamp]).toLocaleString();
+
+      layer.setRadius(radius);  // Leaflet method for setting the radius of a circle
+      layer.bindPopup(popupContent, { offset: new L.Point(0,-radius) }); // bind the popup content, with an offset
+  });
+}
+
+// calculate the radius of the proportional symbols based on area
+function calcPropRadius(attributeValue) {
+
+  var scaleFactor = 0.001;   // the scale factor is used to scale the values; the radius of a circle marker is in pixels
+                             // you may determine the scale factor accordingly based on the range of the values and the mapping scale
+  var area = attributeValue * scaleFactor;
+
+  return Math.sqrt(area/Math.PI);  // the function returns the radius of the circle to be used in the updatePropSymbols()
+}
+
+var slider;   // the slider; more than one function uses it, so we define the variable here
+
+function createSliderUI(timestamps) {
+  var sliderControl = L.control({ position: 'bottomleft' }); // position of the slider
+                                                            // Another use of L.control :)
+  sliderControl.onAdd = function(map) {
+      // a box (div) to hold the slider and the year label
+      var container = L.DomUtil.create("div", "time-control");
+
+L.DomEvent.disableClickPropagation(container); // clicks and drags on the box stay on the box and do not move the map
+
+      // the slider, an HTML range input
+      slider = L.DomUtil.create("input", "range-slider", container);
+      slider.type = "range";
+      slider.min = 0;                      // position 0 is the first timestamp
+      slider.max = timestamps.length - 1;  // the last position is the last timestamp
+      slider.step = 1;                     // the slider moves one timestamp at a time
+      slider.value = 0;                    // start at the first timestamp
+      slider.setAttribute("aria-label", "Year");  // the name a screen reader reads aloud
+
+      // the year label, shown to the right of the slider
+      var label = L.DomUtil.create("output", "temporal-legend", container);
+      label.textContent = timestamps[0];
+
+      // when the slider moves, show the timestamp at the new position
+      slider.addEventListener("input", function() {
+          showTimestamp(timestamps[slider.value]);
+      });
+
+      return container;
+  };
+  sliderControl.addTo(map);
+}
+
+// Show one timestamp: resize the circles and update the year label
+function showTimestamp(timestamp) {
+  updatePropSymbols(timestamp);
+  document.querySelector(".temporal-legend").textContent = timestamp;
+}
+
+function createPlayButton(timestamps) {
+  var speed = 1000;   // time between steps in milliseconds (1000 = 1 second)
+                      // use a smaller number to play faster
+  var timer = null;   // holds the running animation; null means it is not playing
+
+  // create the button and place it in the slider box, in front of the slider
+  var button = L.DomUtil.create("button", "play-button");
+  button.textContent = "Play";
+  document.querySelector(".time-control").prepend(button);
+
+  // what happens when the button is clicked
+  button.addEventListener("click", function() {
+      if (timer !== null) {   // if the animation is playing, pause it
+          stopPlaying();
+          return;
+      }
+      if (Number(slider.value) === timestamps.length - 1) {   // at the last timestamp, start over
+          slider.value = 0;
+          showTimestamp(timestamps[0]);
+      }
+      button.textContent = "Pause";
+
+      // setInterval() runs the function inside it again and again, once every [speed] milliseconds
+      timer = setInterval(function() {
+          var next = Number(slider.value) + 1;   // the next position on the slider
+          slider.value = next;
+          showTimestamp(timestamps[next]);
+          if (next === timestamps.length - 1) {  // stop at the last timestamp
+              stopPlaying();
+          }
+      }, speed);
+  });
+
+  function stopPlaying() {
+      clearInterval(timer);   // clearInterval() stops the animation
+      timer = null;
+      button.textContent = "Play";
+  }
+}
+
+function createLegend(min, max) {
+
+    if (min < 10) {
+        min = 10;
+    }
+
+    // round a number to two significant digits, for example 8175133 becomes 8200000
+    function roundNumber(inNumber) {
+        var unit = Math.pow(10, Math.floor(Math.log10(inNumber)) - 1);
+        return Math.round(inNumber / unit) * unit;
+    }
+
+    var legend = L.control( { position: 'bottomright'} );
+
+    legend.onAdd = function(map) {
+
+        var legendContainer = L.DomUtil.create("div", "legend");
+        L.DomEvent.disableClickPropagation(legendContainer);
+
+        // the legend title; change it to describe your data
+        legendContainer.innerHTML = "<h2 id='legendTitle'>Total Population</h2>";
+
+        var symbolsContainer = L.DomUtil.create("div", "symbolsContainer", legendContainer);
+        var classes = [roundNumber(min), roundNumber((max-min)/2), roundNumber(max)]; // three example values
+        var lastRadius = 0;
+
+        for (var i = 0; i < classes.length; i++) {
+
+            var legendCircle = L.DomUtil.create("div", "legendCircle", symbolsContainer);
+            var currentRadius = calcPropRadius(classes[i]);  // the same radius function as the map circles
+            var margin = -currentRadius - lastRadius - 5;
+
+            legendCircle.style.width = currentRadius*2 + "px";
+            legendCircle.style.height = currentRadius*2 + "px";
+            legendCircle.style.marginLeft = margin + "px";
+            legendCircle.innerHTML = "<span class='legendValue'>" + classes[i].toLocaleString() + "</span>";
+
+            lastRadius = currentRadius;
+        }
+
+        return legendContainer;
+    };
+
+    legend.addTo(map);
+}
+        </script>
+   </body>
+</html>
